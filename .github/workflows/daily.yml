@@ -1,0 +1,27 @@
+name: Daily Semiconductor News
+
+on:
+  schedule:
+    - cron: '0 22 * * *'  # UTC 기준 밤 10시 = 한국 시간 아침 7시
+  workflow_dispatch:     # 수동 테스트 실행 지원
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install libraries
+        run: pip install requests beautifulsoup4 feedparser
+
+      - name: Run script
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python news_bot.py
