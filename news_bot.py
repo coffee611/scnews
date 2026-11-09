@@ -4,6 +4,7 @@ import requests
 import feedparser
 from datetime import datetime
 from bs4 import BeautifulSoup
+from urllib.parse import quote
 
 BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
@@ -32,8 +33,10 @@ def clean_summary(raw_html):
     return text
 
 def fetch_article(keyword, domains, sources):
+    # 공백 및 특수문자 에러 방지를 위해 quote() 함수로 URL 인코딩 적용
     query = f"{keyword} {domains} when:1d"
-    url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
+    encoded_query = quote(query)
+    url = f"https://news.google.com/rss/search?q={encoded_query}&hl=ko&gl=KR&ceid=KR:ko"
     feed = feedparser.parse(url)
     
     if feed.entries:
@@ -46,7 +49,8 @@ def fetch_article(keyword, domains, sources):
         }
     
     fallback_query = f"{keyword} when:1d"
-    fallback_url = f"https://news.google.com/rss/search?q={fallback_query}&hl=ko&gl=KR&ceid=KR:ko"
+    encoded_fallback = quote(fallback_query)
+    fallback_url = f"https://news.google.com/rss/search?q={encoded_fallback}&hl=ko&gl=KR&ceid=KR:ko"
     fallback_feed = feedparser.parse(fallback_url)
     
     for entry in fallback_feed.entries:
