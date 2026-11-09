@@ -14,12 +14,8 @@ KEYWORDS = [
     "D램", "낸드", "파운드리", "디스플레이", "데이터센터"
 ]
 
-# 국내 주요 경제·일간지
-DOMESTIC_DOMAINS = "(site:hankyung.com OR site:mk.co.kr OR site:sedaily.com OR site:mt.co.kr OR site:edaily.co.kr OR site:etnews.com OR site:chosun.com OR site:joongang.co.kr OR site:donga.com OR site:hani.co.kr OR site:khan.co.kr OR site:hankookilbo.com OR site:yna.co.kr)"
+# 타겟 언론사 이름 키워드 리스트 (이 중 하나의 단어가 출처에 포함되면 통과)
 DOMESTIC_SOURCES = ["한국경제", "매일경제", "서울경제", "머니투데이", "이데일리", "전자신문", "조선일보", "중앙일보", "동아일보", "한겨레", "경향신문", "한국일보", "연합뉴스"]
-
-# 해외 외신 및 IT 전문지
-OVERSEAS_DOMAINS = "(site:reuters.com OR site:bloomberg.com OR site:cnbc.com OR site:ft.com OR site:asia.nikkei.com OR site:trendforce.com OR site:digitimes.com)"
 OVERSEAS_SOURCES = ["Reuters", "Bloomberg", "CNBC", "Financial Times", "Nikkei", "TrendForce", "DigiTimes"]
 
 def clean_summary(raw_html):
@@ -32,37 +28,26 @@ def clean_summary(raw_html):
         text = text[:120] + "..."
     return text
 
-def fetch_article(keyword, domains, sources):
-    # 공백 및 특수문자 에러 방지를 위해 quote() 함수로 URL 인코딩 적용
-    query = f"{keyword} {domains} when:1d"
-    encoded_query = quote(query)
+def fetch_articles_by_sources(keyword, target_sources):
+    """site 연산자 없이 키워드로 검색한 뒤, 지정된 언론사 리스트에 매칭되는 기사들을 수집"""
+    encoded_query = quote(f"{keyword} when:1d")
     url = f"https://news.google.com/rss/search?q={encoded_query}&hl=ko&gl=KR&ceid=KR:ko"
     feed = feedparser.parse(url)
     
-    if feed.entries:
-        entry = feed.entries[0]
-        return {
-            "title": entry.title,
-            "link": entry.link,
-            "source": entry.source.title if 'source' in entry else "주요 매체",
-            "summary": clean_summary(entry.get('summary', ''))
-        }
+    matched_articles = []
     
-    fallback_query = f"{keyword} when:1d"
-    encoded_fallback = quote(fallback_query)
-    fallback_url = f"https://news.google.com/rss/search?q={encoded_fallback}&hl=ko&gl=KR&ceid=KR:ko"
-    fallback_feed = feedparser.parse(fallback_url)
-    
-    for entry in fallback_feed.entries:
+    for entry in feed.entries:
         source_title = entry.source.title if 'source' in entry else ""
-        if any(src.lower() in source_title.lower() for src in sources):
-            return {
+        # 언론사 이름이 일치하는지 확인
+        if any(src.lower() in source_title.lower() for src in target_sources):
+            matched_articles.append({
                 "title": entry.title,
                 "link": entry.link,
                 "source": source_title,
                 "summary": clean_summary(entry.get('summary', ''))
-            }
-    return None
+            })
+            
+    return matched_articles
 
 def main():
     if not BOT_TOKEN or not CHAT_ID:
@@ -75,33 +60,38 @@ def main():
     
     seen_links = set()
     
-    # 국내 뉴스 파트
+    # [파트 1] 국내 뉴스 수집
     message += "🇰🇷 *[국내 주요 경제 및 일간지]*\n"
     dom_count = 0
     for kw in KEYWORDS:
-        article = fetch_article(kw, DOMESTIC_DOMAINS, DOMESTIC_SOURCES)
-        if article and article['link'] not in seen_links:
-            seen_links.add(article['link'])
-            dom_count += 1
-            message += f"• *[{kw}]* [{article['title']}]({article['link']})\n"
-            message += f"  📝 _{article['summary']}_\n"
-            message += f"  └ 출처: {article['source']}\n\n"
-            
+        articles = fetch_articles_by_sources(kw, DOMESTIC_SOURCES)
+        if articles:
+            # 키워드당 가장 최신 기사 1개만 채택
+            article = articles[0]
+            if article['link'] not in seen_links:
+                seen_links.add(article['link'])
+                dom_count += 1
+                message += f"• *[{kw}]* [{article['title']}]({article['link']})\n"
+                message += f"  📝 _{article['summary']}_\n"
+                message += f"  └ 출처: {article['source']}\n\n"
+                
     if dom_count == 0:
         message += "• 수집된 국내 기사가 없습니다.\n\n"
     
-    # 해외 외신 파트
+    # [파트 2] 해외 외신 수집
     message += "🌐 *[해외 외신 및 전문 매체]*\n"
     over_count = 0
     for kw in KEYWORDS:
-        article = fetch_article(kw, OVERSEAS_DOMAINS, OVERSEAS_SOURCES)
-        if article and article['link'] not in seen_links:
-            seen_links.add(article['link'])
-            over_count += 1
-            message += f"• *[{kw}]* [{article['title']}]({article['link']})\n"
-            message += f"  📝 _{article['summary']}_\n"
-            message += f"  └ 출처: {article['source']}\n\n"
-            
+        articles = fetch_articles_by_sources(kw, OVERSEAS_SOURCES)
+        if articles:
+            article = articles[0]
+            if article['link'] not in seen_links:
+                seen_links.add(article['link'])
+                over_count += 1
+                message += f"• *[{kw}]* [{article['title']}]({article['link']})\n"
+                message += f"  📝 _{article['summary']}_\n"
+                message += f"  └ 출처: {article['source']}\n\n"
+                
     if over_count == 0:
         message += "• 수집된 해외 기사가 없습니다.\n\n"
         
